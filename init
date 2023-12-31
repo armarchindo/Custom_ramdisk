@@ -2,7 +2,11 @@
 
 # Default PATH differs between shells, and is not automatically exported
 # by klibc dash.  Make it consistent.
-export PATH=/sbin:/usr/sbin:/bin:/usr/bin
+# Furthermore, this PATH ends up being used by the init, set it to the
+# Standard PATH, without /snap/bin as documented in
+# https://wiki.ubuntu.com/PATH
+# This also matches /etc/environment, but without games path
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 [ -d /dev ] || mkdir -m 0755 /dev
 [ -d /root ] || mkdir -m 0700 /root
@@ -50,10 +54,13 @@ export ROOTDELAY=
 export ROOTFLAGS=
 export ROOTFSTYPE=
 export IP=
+export IP6=
+export VLAN=
 export DEVICE=
 export BOOT=
 export BOOTIF=
 export UBIMTD=
+export NETWORK_SKIP_ENSLAVED=
 export break=
 export init=/sbin/init
 export readonly=y
@@ -69,6 +76,11 @@ export fastboot=n
 export forcefsck=n
 export fsckfix=
 
+
+# mdadm needs hostname to be set. This has to be done before the udev rules are called!
+if [ -f "/etc/hostname" ]; then
+        /bin/hostname -F /etc/hostname >/dev/null 2>&1
+fi
 
 # Bring in the main config
 . /conf/initramfs.conf
@@ -104,6 +116,26 @@ for x in $(cat /proc/cmdline); do
 			;;
 		esac
 		;;
+	roottimeout=*)
+		ROOTDELAY="${x#roottimeout=}"
+		case ${ROOTDELAY} in
+		*[![:digit:].]*)
+			ROOTDELAY=
+			;;
+		esac
+		;;
+	loop=*)
+		# shellcheck disable=SC2034
+		LOOP="${x#loop=}"
+		;;
+	loopflags=*)
+		# shellcheck disable=SC2034
+		LOOPFLAGS="-o ${x#loopflags=}"
+		;;
+	loopfstype=*)
+		# shellcheck disable=SC2034
+		LOOPFSTYPE="${x#loopfstype=}"
+		;;
 	nfsroot=*)
 		# shellcheck disable=SC2034
 		NFSROOT="${x#nfsroot=}"
@@ -114,6 +146,12 @@ for x in $(cat /proc/cmdline); do
 	ip=*)
 		IP="${x#ip=}"
 		;;
+	ip6=*)
+		IP6="${x#ip6=}"
+		;;
+	vlan=*)
+		VLAN="${x#vlan=}"
+		;;
 	boot=*)
 		BOOT=${x#boot=}
 		;;
@@ -122,6 +160,10 @@ for x in $(cat /proc/cmdline); do
 		;;
 	resume=*)
 		RESUME="${x#resume=}"
+		case $RESUME in
+		UUID=*)
+			RESUME="/dev/disk/by-uuid/${RESUME#UUID=}"
+		esac
 		;;
 	resume_offset=*)
 		resume_offset="${x#resume_offset=}"
@@ -167,10 +209,13 @@ for x in $(cat /proc/cmdline); do
 		;;
 	netconsole=*)
 		netconsole=${x#netconsole=}
-		[ "x$debug" = "xy" ] && log_output=/dev/kmsg
+		[ "$debug" = "y" ] && log_output=/dev/kmsg
 		;;
 	BOOTIF=*)
 		BOOTIF=${x#BOOTIF=}
+		;;
+	hwaddr=*)
+		BOOTIF=${x#hwaddr=}
 		;;
 	fastboot|fsck.mode=skip)
 		fastboot=y
@@ -220,10 +265,6 @@ load_modules
 starttime="$(_uptime)"
 starttime=$((starttime + 1)) # round up
 export starttime
-
-if [ "$ROOTDELAY" ]; then
-	sleep "$ROOTDELAY"
-fi
 
 maybe_break premount
 [ "$quiet" != "y" ] && log_begin_msg "Running /scripts/init-premount"
@@ -297,6 +338,8 @@ unset ROOTFSTYPE
 unset ROOTDELAY
 unset ROOT
 unset IP
+unset IP6
+unset VLAN
 unset BOOT
 unset BOOTIF
 unset DEVICE

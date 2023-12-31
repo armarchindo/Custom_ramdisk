@@ -1,5 +1,7 @@
 /scripts/local-premount/btrfs "$@"
 [ -e /conf/param.conf ] && . /conf/param.conf
+/scripts/local-premount/fixrtc "$@"
+[ -e /conf/param.conf ] && . /conf/param.conf
 /scripts/local-premount/ntfs_3g "$@"
 [ -e /conf/param.conf ] && . /conf/param.conf
 /scripts/local-premount/resume "$@"

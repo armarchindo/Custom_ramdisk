@@ -5,7 +5,7 @@ all:
 	       ! -path "./Initrd" \
 	       ! -path "./uInitrd" \
 	| cpio -o -Hnewc |gzip -9 > ../Initrd 
-	mkimage -n 'Ramdisk by DBAI' -A arm64 -O linux -T ramdisk -C none -d ../Initrd ../uInitrd
+	mkimage -n 'ramdisk by DBAI' -A arm64 -O linux -T ramdisk -C none -d ../Initrd ../uInitrd
 
 clean:
 	rm Initrd -rf
